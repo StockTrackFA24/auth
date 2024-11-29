@@ -2,6 +2,8 @@ var express = require('express');
 const argon2 = require('argon2');
 var router = express.Router();
 
+const { Long } = require('mongodb');
+
 /* user sample
  * {
  *   "_id": ObjectId,
@@ -31,10 +33,10 @@ var router = express.Router();
  *   "name": String, -- Frontend note: The auth service expects this to match the following regular expression: /^[a-z][a-z0-9_\-]+$/.
  *   "displayName": String || null, -- Frontend note: Fall back to "name" for frontend display purposes if this is absent.
  *   "description": String || null,
- *   "addPermissions": Int64,
- *   "subPermissions": Int64, -- Denied permissions take precedence over allowed permissions.
+ *   "permissions": Int64,
  *
- *   "inherit": [ObjectId] -- This role inherits the permissions from this role.
+ *   "inherit": [ObjectId], -- This role inherits the permissions from this role.
+ *   "weight": Int32
  * }
  *
  */
@@ -112,14 +114,35 @@ router.post('/login', async (req, res, next) => {
         startWith: '$roles',
         connectFromField: 'inherit',
         connectToField: '_id',
-        as: 'allRoles',
-        depthField: 'depth'
+        as: 'allRoles'
       }
     },
     {
-      $unwind: '$allRoles'
+      $project: {
+        permissions: {
+          $convert: {
+            input: {
+              $reduce: {
+                input: '$allRoles',
+                initialValue: {$ifNull: ['$permissions', Long.UZERO]},
+                in: {
+                  $bitOr: ['$$value', {$ifNull: ['$$this.permissions', Long.UZERO]}]
+                }
+              }
+            },
+            to: 'long',
+            onNull: Long.UZERO
+          }
+        },
+        _id: 0
+      }
     }
-  ]).next();
+  ], { promoteLongs: false }).next();
+
+  if (!perms || !(perms.permissions instanceof Long)) {
+    console.dir(perms);
+    return next({status: 500, message: "Internal error resolving permissions. Please contact an administrator."});
+  }
 
   console.log(perms);
 
