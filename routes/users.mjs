@@ -1,8 +1,13 @@
-var express = require('express');
-const argon2 = require('argon2');
-var router = express.Router();
+import '../loadenv.mjs';
 
-const { Long } = require('mongodb');
+import express from 'express';
+import argon2 from 'argon2';
+const router = express.Router();
+
+import { Long } from 'mongodb';
+import users from '../mongodb.mjs';
+
+import JWT_KEY from "../jwt.mjs";
 
 /* user sample
  * {
@@ -41,7 +46,7 @@ const { Long } = require('mongodb');
  *
  */
 
-const VALID_USERNAME_PATTERN = /^[a-z][a-z0-9_.]{2,31}$/
+const VALID_USERNAME_PATTERN = /^[a-z][a-z0-9_.]{2,31}$/;
 const PASSWORD_SECRET = Buffer.from(process.env.PASSWORD_SECRET);
 
 /* GET users listing. */
@@ -70,7 +75,7 @@ router.post('/login', async (req, res, next) => {
 
   const GENERIC_AUTH_ERROR = {status: 403, message: 'Invalid username/password'};
   const doSleep = (ms) => (new Promise((resolve, _) => setTimeout(resolve, ms)));
-  const user = await req.collections.users.findOne({username: {$eq: req.body.username}});
+  const user = await users.findOne({username: {$eq: req.body.username}});
 
   // ... try to make sure you can't use this endpoint as an oracle for whether a username exists by fuzzing the timings a bit ...
   await doSleep(Math.random() * 250);
@@ -104,7 +109,7 @@ router.post('/login', async (req, res, next) => {
     }
   }
 
-  const perms = await req.collections.users.aggregate([
+  const perms = await users.aggregate([
     {
       $match: { _id: user._id }
     },
@@ -120,19 +125,18 @@ router.post('/login', async (req, res, next) => {
     {
       $project: {
         permissions: {
-          $convert: {
-            input: {
+          $ifNull: [
+            {
               $reduce: {
                 input: '$allRoles',
                 initialValue: {$ifNull: ['$permissions', Long.UZERO]},
                 in: {
-                  $bitOr: ['$$value', {$ifNull: ['$$this.permissions', Long.UZERO]}]
+                  $bitOr: ['$$value', {$convert: { input: '$$this.permissions', to: 'long', onNull: Long.UZERO } }]
                 }
               }
             },
-            to: 'long',
-            onNull: Long.UZERO
-          }
+            Long.UZERO
+          ]
         },
         _id: 0
       }
@@ -144,9 +148,11 @@ router.post('/login', async (req, res, next) => {
     return next({status: 500, message: "Internal error resolving permissions. Please contact an administrator."});
   }
 
+
+
   console.log(perms);
 
   return next({status: 501, message: "not implemented"});
 });
 
-module.exports = router;
+export default router;
