@@ -7,6 +7,7 @@
 import '../loadenv.mjs';
 
 import app from '../app.mjs';
+import internalApp from '../internal.mjs';
 
 import debugMod from 'debug';
 const debug = debugMod('auth:server');
@@ -18,13 +19,16 @@ import http from 'http';
  */
 
 const port = normalizePort(process.env.PORT || '3000');
+const internalPort = normalizePort(process.env.PORT_INTERNAL || '3001');
 app.set('port', port);
+internalApp.set('port', internalPort);
 
 /**
  * Create HTTP server.
  */
 
 const server = http.createServer(app);
+const internalServer = http.createServer(internalApp);
 
 /**
  * Listen on provided port, on all network interfaces.
@@ -32,7 +36,11 @@ const server = http.createServer(app);
 
 server.listen(port);
 server.on('error', onError);
-server.on('listening', onListening);
+server.on('listening', () => onListening(server));
+
+internalServer.listen(internalPort);
+internalServer.on('error', onError);
+internalServer.on('listening', () => onListening(internalServer));
 
 /**
  * Normalize a port into a number, string, or false.
@@ -86,8 +94,8 @@ function onError(error) {
  * Event listener for HTTP server "listening" event.
  */
 
-function onListening() {
-  const addr = server.address();
+function onListening(srv) {
+  const addr = srv.address();
   const bind = typeof addr === 'string'
     ? 'pipe ' + addr
     : 'port ' + addr.port;

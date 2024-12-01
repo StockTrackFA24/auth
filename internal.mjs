@@ -1,7 +1,7 @@
 import express from 'express';
 import logger from 'morgan';
 
-import usersRouter from './routes/users.mjs';
+import { usersRouter } from "./internalroutes/users.mjs";
 import { jsonError } from "./common.mjs";
 
 const app = express();

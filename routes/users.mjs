@@ -1,4 +1,4 @@
-import '../loadenv.mjs';
+import { PASSWORD_SECRET } from '../loadenv.mjs';
 
 import express from 'express';
 import argon2 from 'argon2';
@@ -6,10 +6,10 @@ const router = express.Router();
 
 import { Long, Binary, ObjectId } from 'mongodb';
 import { users, refreshTokens } from '../mongodb.mjs';
-
+import { requireAcceptsJson } from "../common.mjs";
 import JWT_KEY from "../jwt.mjs";
-import { SignJWT } from "jose";
 
+import { SignJWT } from "jose";
 import * as crypto from 'crypto';
 
 /* user sample
@@ -51,7 +51,6 @@ import * as crypto from 'crypto';
 
 const VALID_USERNAME_PATTERN = /^[a-z][a-z0-9_.]{2,31}$/;
 const VALID_REFRESH_TOKEN_PATTERN = /^urn:refresh:stocktrack:([a-zA-Z0-9+\/]{0,200}={0,3})$/
-const PASSWORD_SECRET = Buffer.from(process.env.PASSWORD_SECRET);
 
 async function authUser(user, res, next) {
   if (typeof user.loginDisabled === 'string') {
@@ -127,15 +126,7 @@ async function authUser(user, res, next) {
   });
 }
 
-router.use((req, res, next) => {
-  if (!req.accepts('json')) {
-    res.status(400);
-    res.end();
-    return;
-  }
-
-  return next();
-});
+router.use(requireAcceptsJson);
 
 /* GET users listing. */
 router.post('/login', async (req, res, next) => {
