@@ -4,7 +4,7 @@ import express from 'express';
 import argon2 from 'argon2';
 const router = express.Router();
 
-import { Long, Binary } from 'mongodb';
+import { Long, Binary, ObjectId } from 'mongodb';
 import { users, refreshTokens } from '../mongodb.mjs';
 
 import JWT_KEY from "../jwt.mjs";
@@ -50,59 +50,10 @@ import * as crypto from 'crypto';
  */
 
 const VALID_USERNAME_PATTERN = /^[a-z][a-z0-9_.]{2,31}$/;
+const VALID_REFRESH_TOKEN_PATTERN = /^urn:refresh:stocktrack:([a-zA-Z0-9+\/]{0,200}={0,3})$/
 const PASSWORD_SECRET = Buffer.from(process.env.PASSWORD_SECRET);
 
-/* GET users listing. */
-router.post('/login', async (req, res, next) => {
-  if (!req.accepts('json')) {
-    res.status(400);
-    res.end();
-    return;
-  }
-
-  // validation...
-
-  if (typeof req.body.username !== 'string') {
-    return next({status: 400, message: 'Missing username'});
-  }
-
-  if (!VALID_USERNAME_PATTERN.test(req.body.username)) {
-    return next({status: 400, message: 'Invalid username'});
-  }
-
-  if (typeof req.body.password !== 'string' || !req.body.password) {
-    return next({status: 400, message: 'Missing password'});
-  }
-
-  // ... look up user by username ...
-
-  const GENERIC_AUTH_ERROR = {status: 403, message: 'Invalid username/password'};
-  const doSleep = (ms) => (new Promise((resolve, _) => setTimeout(resolve, ms)));
-  const user = await users.findOne({username: {$eq: req.body.username}});
-
-  // ... try to make sure you can't use this endpoint as an oracle for whether a username exists by fuzzing the timings a bit ...
-  await doSleep(Math.random() * 250);
-
-  if (!user || !user.password) {
-    await doSleep(100);
-    return next(GENERIC_AUTH_ERROR);
-  }
-
-  // make sure the password is valid
-
-  try {
-    if (!await argon2.verify(user.password, req.body.password, { secret: PASSWORD_SECRET })) {
-      return next(GENERIC_AUTH_ERROR);
-    }
-  } catch (e) {
-    console.dir(e);
-    return next({status: 500, message: "Internal error"});
-  }
-
-  // make sure they are actually allowed to log in
-  /* (the rationale behind doing this *after* the server has spent resources on password validation is that I don't want
-   *  randos to be able to check if a user is forbidden from logging in without actually getting the password correct) */
-
+async function authUser(user, res, next) {
   if (typeof user.loginDisabled === 'string') {
     if (user.loginDisabled) {
       // XSS WARNING FOR FRONTEND!!!!! Do not just put this string on the page! Make sure to sanitize it first!!
@@ -148,7 +99,7 @@ router.post('/login', async (req, res, next) => {
 
   if (!perms || !(perms.permissions instanceof Long)) {
     console.dir(perms);
-    return next({status: 500, message: "Internal error resolving permissions. Please contact an administrator."});
+    return next({status: 500, message: "Internal error"});
   }
 
   const jwt = await new SignJWT({
@@ -162,8 +113,7 @@ router.post('/login', async (req, res, next) => {
     .setExpirationTime('1h')
     .sign(JWT_KEY);
 
-  console.log(jwt);
-  const refreshToken = crypto.randomBytes(64);
+  const refreshToken = crypto.randomBytes(128);
   await refreshTokens.insertOne({
     _id: new Binary(new Uint8Array(refreshToken), 8),
     user: user._id,
@@ -171,9 +121,107 @@ router.post('/login', async (req, res, next) => {
   });
 
   res.status(200).send({
+    uid: user._id.toString('base64'),
     token: jwt,
     refresh: 'urn:refresh:stocktrack:' + refreshToken.toString('base64')
   });
+}
+
+router.use((req, res, next) => {
+  if (!req.accepts('json')) {
+    res.status(400);
+    res.end();
+    return;
+  }
+
+  return next();
+});
+
+/* GET users listing. */
+router.post('/login', async (req, res, next) => {
+  // validation...
+
+  if (typeof req.body.username !== 'string') {
+    return next({status: 400, message: 'Missing username'});
+  }
+
+  if (!VALID_USERNAME_PATTERN.test(req.body.username)) {
+    return next({status: 400, message: 'Invalid username'});
+  }
+
+  if (typeof req.body.password !== 'string' || !req.body.password) {
+    return next({status: 400, message: 'Missing password'});
+  }
+
+  // ... look up user by username ...
+
+  const GENERIC_AUTH_ERROR = {status: 403, message: 'Invalid username/password'};
+  const doSleep = (ms) => (new Promise((resolve, _) => setTimeout(resolve, ms)));
+  const user = await users.findOne({username: {$eq: req.body.username}});
+
+  // ... try to make sure you can't use this endpoint as an oracle for whether a username exists by fuzzing the timings a bit ...
+  await doSleep(Math.random() * 250);
+
+  if (!user || !user.password) {
+    await doSleep(100);
+    return next(GENERIC_AUTH_ERROR);
+  }
+
+  // make sure the password is valid
+
+  try {
+    if (!await argon2.verify(user.password, req.body.password, { secret: PASSWORD_SECRET })) {
+      return next(GENERIC_AUTH_ERROR);
+    }
+  } catch (e) {
+    console.dir(e);
+    return next({status: 500, message: "Internal error"});
+  }
+
+  return await authUser(user, res, next);
+});
+
+router.post('/refresh', async (req, res, next) => {
+  // validation ...
+
+  if (typeof req.body.refreshToken !== 'string') {
+    return next({status: 400, message: 'Missing refreshToken'});
+  }
+
+  const refreshTokenMatch = VALID_REFRESH_TOKEN_PATTERN.exec(req.body.refreshToken);
+  if (!refreshTokenMatch) {
+    return next({status: 400, message: 'Invalid refreshToken'});
+  }
+
+  let refreshToken;
+  try {
+    refreshToken = Binary.createFromBase64(refreshTokenMatch[1], 8)
+  } catch (e) {
+    return next({status: 400, message: 'Invalid refreshToken'});
+  }
+
+  if (typeof req.body.uid !== 'string') {
+    return next({status: 400, message: 'Missing uid'});
+  }
+
+  let uid;
+  try {
+    uid = ObjectId.createFromBase64(req.body.uid);
+  } catch (e) {
+    return next({status: 400, message: 'Invalid uid'});
+  }
+
+  const theRefresh = await refreshTokens.findOneAndDelete({ _id: refreshToken, user: uid, issue: { $lt: new Date(Date.now() - 120000) } });
+  if (!theRefresh) {
+    return next({status: 403, message: 'Invalid credential'});
+  }
+
+  const user = await users.findOne({ _id: uid });
+  if (!user) {
+    return next({status: 404, message: 'No such user is known'});
+  }
+
+  return await authUser(user, res, next);
 });
 
 export default router;
