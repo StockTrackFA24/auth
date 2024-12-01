@@ -4,10 +4,13 @@ import express from 'express';
 import argon2 from 'argon2';
 const router = express.Router();
 
-import { Long } from 'mongodb';
-import users from '../mongodb.mjs';
+import { Long, Binary } from 'mongodb';
+import { users, refreshTokens } from '../mongodb.mjs';
 
 import JWT_KEY from "../jwt.mjs";
+import { SignJWT } from "jose";
+
+import * as crypto from 'crypto';
 
 /* user sample
  * {
@@ -148,11 +151,29 @@ router.post('/login', async (req, res, next) => {
     return next({status: 500, message: "Internal error resolving permissions. Please contact an administrator."});
   }
 
+  const jwt = await new SignJWT({
+    uid: user._id.toString('base64'),
+    p: Buffer.from(new Uint8Array(perms.permissions.toBytesBE())).toString('base64')
+  })
+    .setProtectedHeader({alg: process.env.JWT_ALG})
+    .setIssuedAt()
+    .setIssuer('urn:stocktrack')
+    .setAudience('urn:stocktrack:be')
+    .setExpirationTime('1h')
+    .sign(JWT_KEY);
 
+  console.log(jwt);
+  const refreshToken = crypto.randomBytes(64);
+  await refreshTokens.insertOne({
+    _id: new Binary(new Uint8Array(refreshToken), 8),
+    user: user._id,
+    issue: new Date()
+  });
 
-  console.log(perms);
-
-  return next({status: 501, message: "not implemented"});
+  res.status(200).send({
+    token: jwt,
+    refresh: 'urn:refresh:stocktrack:' + refreshToken.toString('base64')
+  });
 });
 
 export default router;
