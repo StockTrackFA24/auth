@@ -119,6 +119,8 @@ async function authUser(user, res, next) {
     issue: new Date()
   });
 
+  await users.updateOne({_id: user._id}, {$set: {lastLogin: new Date()}});
+
   res.status(200).send({
     uid: user._id.toString('base64'),
     token: jwt,
