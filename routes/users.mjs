@@ -68,7 +68,7 @@ async function authUser(user, res, next) {
     },
     {
       $graphLookup: {
-        from: 'roles',
+        from: process.env.COLLECTION_ROLES,
         startWith: '$roles',
         connectFromField: 'inherit',
         connectToField: '_id',
