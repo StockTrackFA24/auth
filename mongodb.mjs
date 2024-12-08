@@ -6,7 +6,7 @@ const client = new MongoClient(process.env.MONGODB_URI);
 export const db = client.db();
 export const users = db.collection(process.env.COLLECTION_USERS || 'users');
 export const roles = db.collection(process.env.COLLECTION_ROLES || 'roles');
-export const refreshTokens = db.collection('refreshTokens');
+export const refreshTokens = db.collection(process.env.COLLECTION_REFRESH_TOKENS || 'refreshTokens');
 
 try {
   await client.connect();
