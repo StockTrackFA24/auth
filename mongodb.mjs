@@ -4,8 +4,8 @@ import { MongoClient } from "mongodb";
 const client = new MongoClient(process.env.MONGODB_URI);
 
 export const db = client.db();
-export const users = db.collection('users');
-export const roles = db.collection('roles');
+export const users = db.collection(process.env.COLLECTION_USERS || 'users');
+export const roles = db.collection(process.env.COLLECTION_ROLES || 'roles');
 export const refreshTokens = db.collection('refreshTokens');
 
 try {
