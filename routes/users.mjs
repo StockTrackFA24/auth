@@ -32,7 +32,7 @@ import * as crypto from 'crypto';
  *   "loginDisabled": String || null, -- null indicates the user is allowed to log in, or the reason the user is forbidden to log in if present.
  *   "adminNotes": String || null,
  *
- *   "tokenRevoke": DateTime || null, -- Tokens from before this time are rejected as invalid by the backend.
+ *   "tokenInvalidTime": DateTime || null, -- Tokens from before this time are rejected as invalid by the backend.
  *   "roles": [ObjectId] -- Use MongoDB addToSet to add roles here.
  * }
  *
