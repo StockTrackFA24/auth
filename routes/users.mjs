@@ -123,6 +123,7 @@ async function authUser(user, res, next) {
 
   res.status(200).send({
     uid: user._id.toString('base64'),
+    permissions: perms.permissions.toUnsigned().toString(2).padStart(64, '0'),
     token: jwt,
     refresh: 'urn:refresh:stocktrack:' + refreshToken.toString('base64')
   });
