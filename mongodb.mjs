@@ -61,16 +61,15 @@ try {
         middle: 'T',
         last: 'Administrator'
       },
-      displayName: 'Administrator',
-
-      password: pwHash,
-      passwordChanged: new Date(),
+      //displayName: 'Administrator',
       username: 'admin',
-
+      roles: [ role._id ],
       adminNotes: 'Built-in administrator account.',
 
       tokenInvalidTime: new Date(),
-      roles: [ role._id ]
+
+      password: pwHash,
+      passwordChanged: new Date()
     }, { upsert: true });
 
     console.log("Created default admin user and role.");
