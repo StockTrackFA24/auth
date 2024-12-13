@@ -18,6 +18,8 @@ Expected variables are present in `.env.example`.
 
 You must generate a keypair, and share that public key with `backend`. Details about algorithms and key sizes can be found on this Jose issue page: https://github.com/panva/jose/issues/210. A sample `openssl` command is provided in `.env.example` for your convenience.
 
+The port numbers for the internal and external API servers are configurable through the environment as well. Please ensure that they do not conflict with `backend` and `frontend`, if applicable, since the ports they use are hardcoded to `4000` and `3000`, respectfully.
+
 Finally, you must run the program. With your working directory in the root of the project, execute:
 ```shell
 $ node bin/www
